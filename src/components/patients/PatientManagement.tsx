@@ -2,6 +2,14 @@ import React, { useState } from "react";
 import PatientSearch from "./PatientSearch";
 import PatientDirectory from "./PatientDirectory";
 import PatientDetails from "./PatientDetails";
+import PatientForm from "./PatientForm";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
 
 interface Patient {
   id: string;
@@ -24,6 +32,9 @@ const PatientManagement = () => {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFilters, setSearchFilters] = useState<PatientSearchFilters>({});
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const handlePatientSelect = (patient: Patient) => {
     setSelectedPatient(patient);
@@ -37,8 +48,48 @@ const PatientManagement = () => {
   };
 
   const handleAddPatient = () => {
-    // In a real application, this would open a form to add a new patient
-    console.log("Add new patient clicked");
+    setIsAddPatientOpen(true);
+  };
+
+  const handleAddPatientSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    try {
+      // In a real application, this would be an API call to create a patient
+      console.log("Creating patient:", data);
+
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Create a new patient object with the form data
+      const newPatient: Patient = {
+        id: Math.random().toString(36).substring(2, 11),
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        lastVisit: "Never",
+        status: data.status,
+        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.name.replace(/ /g, "")}`,
+      };
+
+      // Close the dialog and show success message
+      setIsAddPatientOpen(false);
+      toast({
+        title: "Patient ajouté",
+        description: `${data.name} a été ajouté avec succès.`,
+      });
+
+      // Select the new patient
+      setSelectedPatient(newPatient);
+    } catch (error) {
+      console.error("Error creating patient:", error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur s'est produite lors de l'ajout du patient.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -109,6 +160,18 @@ const PatientManagement = () => {
           )}
         </div>
       </div>
+
+      <Dialog open={isAddPatientOpen} onOpenChange={setIsAddPatientOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Ajouter un nouveau patient</DialogTitle>
+          </DialogHeader>
+          <PatientForm
+            onSubmit={handleAddPatientSubmit}
+            isLoading={isSubmitting}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

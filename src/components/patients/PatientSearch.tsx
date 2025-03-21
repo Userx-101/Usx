@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, Filter, X } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { dataService } from "@/lib/dataService";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,13 +33,44 @@ const PatientSearch = ({ onSearch, className = "" }: PatientSearchProps) => {
   const [activeFilters, setActiveFilters] = useState<PatientSearchFilters>({});
   const [showFilters, setShowFilters] = useState(false);
 
-  const handleSearch = () => {
-    onSearch?.(searchQuery, activeFilters);
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      // Build query based on search term and filters
+      let query = supabase.from("patients").select("*");
+
+      // Apply search term if provided
+      if (searchQuery) {
+        query = query.or(
+          `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`,
+        );
+      }
+
+      // Apply filters if provided
+      if (activeFilters.status) {
+        query = query.eq("status", activeFilters.status.toLowerCase());
+      }
+
+      if (activeFilters.insuranceProvider) {
+        query = query.eq("insurance_provider", activeFilters.insuranceProvider);
+      }
+
+      // Execute query
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Pass results to parent component
+      onSearch?.(searchQuery, activeFilters);
+    } catch (error) {
+      console.error("Error searching patients:", error);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      handleSearch();
+      handleSearch(e as unknown as React.FormEvent);
     }
   };
 

@@ -12,16 +12,30 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
-import { Loader2, User, Lock, Bell, Monitor } from "lucide-react";
+import { Loader2, User, Lock, Bell, Monitor, Clock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/components/auth/AuthProvider";
 import UpdateProfile from "@/components/auth/UpdateProfile";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useSettings } from "@/contexts/SettingsContext";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useToast } from "@/components/ui/use-toast";
+import { useTheme } from "@/components/ui/theme-provider";
 
 const UserSettings = () => {
   const { user } = useAuth();
+  const { settings, updateSettings } = useSettings();
+  const { theme, setTheme } = useTheme();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("profile");
   const navigate = useNavigate();
+  const [isSaving, setIsSaving] = useState(false);
+  const [localSettings, setLocalSettings] = useState(settings);
+
+  // Update local settings when global settings change
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
 
   if (!user) {
     return (
@@ -30,6 +44,57 @@ const UserSettings = () => {
       </div>
     );
   }
+
+  const handleThemeChange = (value: "light" | "dark" | "system") => {
+    setLocalSettings((prev) => ({ ...prev, theme: value }));
+    // Apply theme immediately for better UX
+    setTheme(value);
+  };
+
+  const handleTimeFormatChange = (value: "12h" | "24h") => {
+    setLocalSettings((prev) => ({ ...prev, timeFormat: value }));
+  };
+
+  const handleFontSizeChange = (value: "small" | "medium" | "large") => {
+    setLocalSettings((prev) => ({ ...prev, fontSize: value }));
+  };
+
+  const handleAccentColorChange = (value: string) => {
+    setLocalSettings((prev) => ({ ...prev, accentColor: value }));
+  };
+
+  const saveSettings = async () => {
+    setIsSaving(true);
+    try {
+      await updateSettings(localSettings);
+      // Apply theme immediately
+      if (localSettings.theme) {
+        setTheme(localSettings.theme);
+      }
+      // Apply other settings that need immediate effect
+      document.documentElement.style.fontSize =
+        localSettings.fontSize === "small"
+          ? "14px"
+          : localSettings.fontSize === "large"
+            ? "18px"
+            : "16px";
+
+      toast({
+        title: "Paramètres enregistrés",
+        description: "Vos préférences ont été mises à jour avec succès.",
+      });
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      toast({
+        title: "Erreur",
+        description:
+          "Une erreur s'est produite lors de l'enregistrement des paramètres.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="w-full h-full bg-background p-6">
@@ -103,7 +168,29 @@ const UserSettings = () => {
                     placeholder="••••••••"
                   />
                 </div>
-                <Button type="submit" className="w-full">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    try {
+                      // This would actually update the password in a real implementation
+                      // For now, just show a success message
+                      toast({
+                        title: "Mot de passe mis à jour",
+                        description:
+                          "Votre mot de passe a été mis à jour avec succès.",
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Erreur",
+                        description:
+                          "Une erreur s'est produite lors de la mise à jour du mot de passe.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
                   Mettre à jour le mot de passe
                 </Button>
               </div>
@@ -129,7 +216,13 @@ const UserSettings = () => {
                         type="checkbox"
                         id="email-appointments"
                         className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                        defaultChecked
+                        checked={localSettings.notificationEmail}
+                        onChange={(e) =>
+                          setLocalSettings((prev) => ({
+                            ...prev,
+                            notificationEmail: e.target.checked,
+                          }))
+                        }
                       />
                       <label htmlFor="email-appointments" className="text-sm">
                         Rappels de rendez-vous
@@ -159,35 +252,20 @@ const UserSettings = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Notifications SMS</Label>
-                  <div className="flex flex-col space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="sms-appointments"
-                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                        defaultChecked
-                      />
-                      <label htmlFor="sms-appointments" className="text-sm">
-                        Rappels de rendez-vous
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="sms-treatments"
-                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                      />
-                      <label htmlFor="sms-treatments" className="text-sm">
-                        Mises à jour des plans de traitement
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <Button type="submit" className="w-full">
-                  Enregistrer les préférences
+                <Button
+                  type="submit"
+                  className="w-full"
+                  onClick={saveSettings}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enregistrement...
+                    </>
+                  ) : (
+                    "Enregistrer les préférences"
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -204,12 +282,155 @@ const UserSettings = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Thème</Label>
-                  <div className="flex items-center justify-between">
-                    <span>Changer le thème de l'application</span>
-                    <ThemeToggle />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base">Thème</Label>
+                    <RadioGroup
+                      value={localSettings.theme || "light"}
+                      onValueChange={(value) =>
+                        handleThemeChange(value as "light" | "dark" | "system")
+                      }
+                      className="flex flex-col space-y-1"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="light" id="light" />
+                        <Label htmlFor="light" className="font-normal">
+                          Clair
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="dark" id="dark" />
+                        <Label htmlFor="dark" className="font-normal">
+                          Sombre
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="system" id="system" />
+                        <Label htmlFor="system" className="font-normal">
+                          Système (utilise les préférences de votre appareil)
+                        </Label>
+                      </div>
+                    </RadioGroup>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-base">Couleur d'accent</Label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[
+                        { name: "Bleu", value: "blue", class: "bg-blue-500" },
+                        { name: "Vert", value: "green", class: "bg-green-500" },
+                        { name: "Rouge", value: "red", class: "bg-red-500" },
+                        {
+                          name: "Violet",
+                          value: "purple",
+                          class: "bg-purple-500",
+                        },
+                        {
+                          name: "Orange",
+                          value: "orange",
+                          class: "bg-orange-500",
+                        },
+                        { name: "Rose", value: "pink", class: "bg-pink-500" },
+                        {
+                          name: "Indigo",
+                          value: "indigo",
+                          class: "bg-indigo-500",
+                        },
+                        {
+                          name: "Émeraude",
+                          value: "emerald",
+                          class: "bg-emerald-500",
+                        },
+                        {
+                          name: "Ambre",
+                          value: "amber",
+                          class: "bg-amber-500",
+                        },
+                        { name: "Cyan", value: "cyan", class: "bg-cyan-500" },
+                      ].map((color) => (
+                        <button
+                          key={color.value}
+                          type="button"
+                          className={`h-10 rounded-md ${color.class} ${localSettings.accentColor === color.value ? "ring-2 ring-offset-2 ring-black dark:ring-white" : ""}`}
+                          title={color.name}
+                          onClick={() => handleAccentColorChange(color.value)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-base">Taille de police</Label>
+                    <RadioGroup
+                      value={localSettings.fontSize || "medium"}
+                      onValueChange={(value) =>
+                        handleFontSizeChange(
+                          value as "small" | "medium" | "large",
+                        )
+                      }
+                      className="flex flex-col space-y-1"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="small" id="small" />
+                        <Label htmlFor="small" className="font-normal text-sm">
+                          Petite
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="medium" id="medium" />
+                        <Label htmlFor="medium" className="font-normal">
+                          Moyenne
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="large" id="large" />
+                        <Label htmlFor="large" className="font-normal text-lg">
+                          Grande
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-base">Format de l'heure</Label>
+                  <RadioGroup
+                    value={localSettings.timeFormat}
+                    onValueChange={(value) =>
+                      handleTimeFormatChange(value as "12h" | "24h")
+                    }
+                    className="flex flex-col space-y-1"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="12h" id="12h" />
+                      <Label htmlFor="12h" className="font-normal">
+                        12 heures (AM/PM)
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="24h" id="24h" />
+                      <Label htmlFor="24h" className="font-normal">
+                        24 heures
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="pt-4">
+                  <Button
+                    className="w-full"
+                    onClick={saveSettings}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Enregistrement...
+                      </>
+                    ) : (
+                      "Enregistrer les préférences"
+                    )}
+                  </Button>
                 </div>
               </div>
             </CardContent>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -39,7 +39,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/lib/supabase";
-import { Package, Plus, Pencil, Trash2, AlertCircle } from "lucide-react";
+import {
+  Package,
+  Plus,
+  Pencil,
+  Trash2,
+  AlertCircle,
+  ShoppingCart,
+} from "lucide-react";
+import InventoryForm from "./InventoryForm";
 
 interface InventoryItem {
   id: string;
@@ -93,32 +101,47 @@ const InventoryManagement = () => {
   const [items, setItems] = useState<InventoryItem[]>(defaultItems);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState<InventoryItem | null>(null);
-  const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
-    name: "",
-    currentStock: 0,
-    minStock: 0,
-    maxStock: 0,
-    unit: "",
-    category: "",
-    supplier: "",
-  });
+  const [formMode, setFormMode] = useState<"add" | "edit">("add");
 
-  useEffect(() => {
-    fetchInventoryItems();
-  }, []);
-
-  const fetchInventoryItems = async () => {
+  const fetchInventoryItems = useCallback(async () => {
     try {
       const { data, error } = await supabase.from("inventory").select("*");
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setItems(data as InventoryItem[]);
+        // Map database fields to our InventoryItem type
+        const inventoryItems: InventoryItem[] = data.map((item) => ({
+          id: item.id,
+          name: item.name,
+          currentStock: item.current_stock,
+          minStock: item.min_stock,
+          maxStock: item.max_stock,
+          unit: item.unit,
+          category: item.category,
+          lastOrdered: item.last_ordered,
+          supplier: item.supplier,
+        }));
+        setItems(inventoryItems);
+      } else if (data && data.length === 0) {
+        // If no items in database, initialize with defaults
+        for (const item of defaultItems) {
+          await supabase.from("inventory").insert({
+            id: item.id,
+            name: item.name,
+            current_stock: item.currentStock,
+            min_stock: item.minStock,
+            max_stock: item.maxStock,
+            unit: item.unit,
+            category: item.category,
+            supplier: item.supplier,
+            last_ordered: item.lastOrdered,
+          });
+        }
+        setItems(defaultItems);
       }
     } catch (error) {
       console.error(
@@ -126,80 +149,119 @@ const InventoryManagement = () => {
         error,
       );
     }
-  };
+  }, []);
 
-  const handleAddItem = async () => {
+  useEffect(() => {
+    fetchInventoryItems();
+
+    // Set up realtime subscription for inventory changes
+    const inventorySubscription = supabase
+      .channel("inventory-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory" },
+        (payload) => {
+          fetchInventoryItems();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(inventorySubscription);
+    };
+  }, [fetchInventoryItems]);
+
+  const handleSaveItem = async (savedItem: InventoryItem) => {
     try {
-      const { data, error } = await supabase
-        .from("inventory")
-        .insert([
-          {
-            name: newItem.name,
-            current_stock: newItem.currentStock,
-            min_stock: newItem.minStock,
-            max_stock: newItem.maxStock,
-            unit: newItem.unit,
-            category: newItem.category,
-            supplier: newItem.supplier,
-            last_ordered: new Date().toISOString().split("T")[0],
-          },
-        ])
-        .select();
-
-      if (error) throw error;
-
-      if (data) {
-        setItems([...items, data[0] as unknown as InventoryItem]);
-        setIsAddDialogOpen(false);
-        setNewItem({
-          name: "",
-          currentStock: 0,
-          minStock: 0,
-          maxStock: 0,
-          unit: "",
-          category: "",
-          supplier: "",
+      if (formMode === "add") {
+        // Create new item in database
+        const { error } = await supabase.from("inventory").insert({
+          name: savedItem.name,
+          current_stock: savedItem.currentStock,
+          min_stock: savedItem.minStock,
+          max_stock: savedItem.maxStock,
+          unit: savedItem.unit,
+          category: savedItem.category,
+          supplier: savedItem.supplier,
+          last_ordered: savedItem.lastOrdered,
         });
+
+        if (error) throw error;
+      } else {
+        // Update existing item
+        const { error } = await supabase
+          .from("inventory")
+          .update({
+            name: savedItem.name,
+            current_stock: savedItem.currentStock,
+            min_stock: savedItem.minStock,
+            max_stock: savedItem.maxStock,
+            unit: savedItem.unit,
+            category: savedItem.category,
+            supplier: savedItem.supplier,
+            last_ordered: savedItem.lastOrdered,
+            updated_at: new Date(),
+          })
+          .eq("id", savedItem.id);
+
+        if (error) throw error;
       }
+
+      // Update will happen via realtime subscription
+      setIsFormOpen(false);
+      setCurrentItem(null);
     } catch (error) {
-      console.error("Erreur lors de l'ajout d'un article:", error);
+      console.error("Error saving inventory item:", error);
     }
   };
 
-  const handleEditItem = async () => {
-    if (!currentItem) return;
+  const openAddForm = () => {
+    setFormMode("add");
+    setCurrentItem(null);
+    setIsFormOpen(true);
+  };
 
-    try {
-      const { data, error } = await supabase
+  const openEditForm = (item: InventoryItem) => {
+    setFormMode("edit");
+    setCurrentItem(item);
+    setIsFormOpen(true);
+  };
+
+  const handleUpdateStock = (item: InventoryItem) => {
+    const quantity = prompt(`Enter new stock quantity for ${item.name}:`);
+    if (quantity && !isNaN(Number(quantity))) {
+      const newQuantity = Number(quantity);
+      const updatedItem = {
+        ...item,
+        currentStock: newQuantity,
+        lastOrdered: new Date().toISOString().split("T")[0],
+      };
+
+      // Update in database - ensure ID is properly handled
+      supabase
         .from("inventory")
         .update({
-          name: currentItem.name,
-          current_stock: currentItem.currentStock,
-          min_stock: currentItem.minStock,
-          max_stock: currentItem.maxStock,
-          unit: currentItem.unit,
-          category: currentItem.category,
-          supplier: currentItem.supplier,
+          current_stock: newQuantity,
+          last_ordered: new Date().toISOString().split("T")[0],
+          updated_at: new Date(),
         })
-        .eq("id", currentItem.id)
-        .select();
-
-      if (error) throw error;
-
-      if (data) {
-        setItems(
-          items.map((item) =>
-            item.id === currentItem.id
-              ? (data[0] as unknown as InventoryItem)
-              : item,
-          ),
-        );
-        setIsEditDialogOpen(false);
-        setCurrentItem(null);
-      }
-    } catch (error) {
-      console.error("Erreur lors de la modification d'un article:", error);
+        .eq("id", item.id.toString())
+        .then(({ error }) => {
+          if (error) {
+            console.error("Error updating stock:", error);
+            alert(`Error updating stock: ${error.message}`);
+          } else {
+            // Update UI
+            setItems(items.map((i) => (i.id === item.id ? updatedItem : i)));
+            alert(`Stock updated for ${item.name} to ${quantity} ${item.unit}`);
+          }
+        });
     }
+  };
+
+  const openDeleteDialog = (item: InventoryItem) => {
+    setCurrentItem(item);
+    setIsDeleteDialogOpen(true);
   };
 
   const handleDeleteItem = async () => {
@@ -219,16 +281,6 @@ const InventoryManagement = () => {
     } catch (error) {
       console.error("Erreur lors de la suppression d'un article:", error);
     }
-  };
-
-  const openEditDialog = (item: InventoryItem) => {
-    setCurrentItem(item);
-    setIsEditDialogOpen(true);
-  };
-
-  const openDeleteDialog = (item: InventoryItem) => {
-    setCurrentItem(item);
-    setIsDeleteDialogOpen(true);
   };
 
   const filteredItems = items.filter((item) => {
@@ -251,120 +303,9 @@ const InventoryManagement = () => {
             Gérez les fournitures et le matériel de la clinique
           </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-1">
-              <Plus className="h-4 w-4" /> Ajouter un Article
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Ajouter un Nouvel Article</DialogTitle>
-              <DialogDescription>
-                Entrez les détails du nouvel article d'inventaire
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nom de l'Article</Label>
-                  <Input
-                    id="name"
-                    value={newItem.name}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Catégorie</Label>
-                  <Input
-                    id="category"
-                    value={newItem.category}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, category: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="currentStock">Stock Actuel</Label>
-                  <Input
-                    id="currentStock"
-                    type="number"
-                    value={newItem.currentStock}
-                    onChange={(e) =>
-                      setNewItem({
-                        ...newItem,
-                        currentStock: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="minStock">Stock Minimum</Label>
-                  <Input
-                    id="minStock"
-                    type="number"
-                    value={newItem.minStock}
-                    onChange={(e) =>
-                      setNewItem({
-                        ...newItem,
-                        minStock: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxStock">Stock Maximum</Label>
-                  <Input
-                    id="maxStock"
-                    type="number"
-                    value={newItem.maxStock}
-                    onChange={(e) =>
-                      setNewItem({
-                        ...newItem,
-                        maxStock: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="unit">Unité</Label>
-                  <Input
-                    id="unit"
-                    value={newItem.unit}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, unit: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="supplier">Fournisseur</Label>
-                  <Input
-                    id="supplier"
-                    value={newItem.supplier}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, supplier: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsAddDialogOpen(false)}
-              >
-                Annuler
-              </Button>
-              <Button onClick={handleAddItem}>Ajouter</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button className="gap-1" onClick={openAddForm}>
+          <Plus className="h-4 w-4" /> Ajouter un Article
+        </Button>
       </div>
 
       <div className="flex items-center justify-between mb-6">
@@ -435,7 +376,16 @@ const InventoryManagement = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => openEditDialog(item)}
+                          onClick={() => handleUpdateStock(item)}
+                          title="Update Stock"
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditForm(item)}
+                          title="Edit Item"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -443,6 +393,7 @@ const InventoryManagement = () => {
                           variant="ghost"
                           size="icon"
                           onClick={() => openDeleteDialog(item)}
+                          title="Delete Item"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -462,130 +413,14 @@ const InventoryManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Modifier l'Article</DialogTitle>
-            <DialogDescription>
-              Modifiez les détails de l'article d'inventaire
-            </DialogDescription>
-          </DialogHeader>
-          {currentItem && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-name">Nom de l'Article</Label>
-                  <Input
-                    id="edit-name"
-                    value={currentItem.name}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        name: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-category">Catégorie</Label>
-                  <Input
-                    id="edit-category"
-                    value={currentItem.category}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        category: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-currentStock">Stock Actuel</Label>
-                  <Input
-                    id="edit-currentStock"
-                    type="number"
-                    value={currentItem.currentStock}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        currentStock: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-minStock">Stock Minimum</Label>
-                  <Input
-                    id="edit-minStock"
-                    type="number"
-                    value={currentItem.minStock}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        minStock: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-maxStock">Stock Maximum</Label>
-                  <Input
-                    id="edit-maxStock"
-                    type="number"
-                    value={currentItem.maxStock}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        maxStock: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-unit">Unité</Label>
-                  <Input
-                    id="edit-unit"
-                    value={currentItem.unit}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        unit: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-supplier">Fournisseur</Label>
-                  <Input
-                    id="edit-supplier"
-                    value={currentItem.supplier}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        supplier: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Annuler
-            </Button>
-            <Button onClick={handleEditItem}>Enregistrer</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Inventory Form Dialog */}
+      <InventoryForm
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        item={currentItem}
+        onSave={handleSaveItem}
+        mode={formMode}
+      />
 
       {/* Delete Dialog */}
       <AlertDialog

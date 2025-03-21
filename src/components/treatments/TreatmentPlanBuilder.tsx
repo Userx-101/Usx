@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,11 @@ import {
   DollarSign,
   Shield,
   Calendar,
+  Edit,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { dataService } from "@/lib/dataService";
+import { useToast } from "@/components/ui/use-toast";
 
 interface Procedure {
   id: string;
@@ -63,7 +67,7 @@ interface TreatmentPlanBuilderProps {
   onShare?: (plan: TreatmentPlan) => void;
 }
 
-const procedureTemplates: Procedure[] = [
+const defaultProcedureTemplates: Procedure[] = [
   {
     id: "proc-1",
     name: "Comprehensive Oral Evaluation",
@@ -153,6 +157,7 @@ const TreatmentPlanBuilder: React.FC<TreatmentPlanBuilderProps> = ({
   onSave = () => {},
   onShare = () => {},
 }) => {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("procedures");
   const [selectedProcedures, setSelectedProcedures] = useState<Procedure[]>(
     existingPlan?.procedures || [],
@@ -169,6 +174,97 @@ const TreatmentPlanBuilder: React.FC<TreatmentPlanBuilderProps> = ({
         notes: "",
       },
     );
+  const [procedureTemplates, setProcedureTemplates] = useState<Procedure[]>(
+    defaultProcedureTemplates,
+  );
+  const [editingProcedure, setEditingProcedure] = useState<Procedure | null>(
+    null,
+  );
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  useEffect(() => {
+    // Load procedure templates from database
+    const loadProcedureTemplates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("procedure_templates")
+          .select("*");
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          // Map database fields to our Procedure type
+          const templates: Procedure[] = data.map((item) => ({
+            id: item.id,
+            name: item.name,
+            code: item.code,
+            cost: item.cost,
+            description: item.description,
+            duration: item.duration,
+            category: item.category,
+          }));
+          setProcedureTemplates(templates);
+        } else {
+          // If no templates in database, initialize with defaults
+          const initialTemplates = defaultProcedureTemplates.map(
+            (template) => ({
+              ...template,
+              id: template.id.startsWith("proc-")
+                ? template.id
+                : `proc-${template.id}`,
+            }),
+          );
+
+          // Save default templates to database
+          for (const template of initialTemplates) {
+            await supabase.from("procedure_templates").insert({
+              id: template.id,
+              name: template.name,
+              code: template.code,
+              cost: template.cost,
+              description: template.description,
+              duration: template.duration,
+              category: template.category,
+            });
+          }
+
+          setProcedureTemplates(initialTemplates);
+        }
+      } catch (error) {
+        console.error("Error loading procedure templates:", error);
+        // Fall back to default templates if database fetch fails
+        setProcedureTemplates(defaultProcedureTemplates);
+      }
+    };
+
+    loadProcedureTemplates();
+
+    // If we have an existing plan, load its procedures from the database
+    if (existingPlan?.id) {
+      loadTreatmentProcedures(existingPlan.id);
+    }
+  }, [existingPlan?.id]);
+
+  const loadTreatmentProcedures = async (planId: string) => {
+    try {
+      const procedures = await dataService.treatmentPlans.getProcedures(planId);
+      if (procedures && procedures.length > 0) {
+        setSelectedProcedures(
+          procedures.map((proc) => ({
+            id: proc.id,
+            name: proc.name,
+            code: proc.code,
+            cost: proc.cost,
+            description: proc.description,
+            duration: proc.duration,
+            category: proc.category,
+          })),
+        );
+      }
+    } catch (error) {
+      console.error("Error loading treatment procedures:", error);
+    }
+  };
 
   const filteredProcedures = procedureTemplates.filter((proc) => {
     const matchesCategory =
@@ -178,6 +274,63 @@ const TreatmentPlanBuilder: React.FC<TreatmentPlanBuilderProps> = ({
       proc.code.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  const openEditDialog = (procedure: Procedure) => {
+    setEditingProcedure({ ...procedure });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateProcedure = async () => {
+    if (!editingProcedure) return;
+
+    try {
+      // Update in database
+      const { error } = await supabase
+        .from("procedure_templates")
+        .update({
+          name: editingProcedure.name,
+          code: editingProcedure.code,
+          cost: editingProcedure.cost,
+          description: editingProcedure.description,
+          duration: editingProcedure.duration,
+          category: editingProcedure.category,
+          updated_at: new Date(),
+        })
+        .eq("id", editingProcedure.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setProcedureTemplates(
+        procedureTemplates.map((proc) =>
+          proc.id === editingProcedure.id ? editingProcedure : proc,
+        ),
+      );
+
+      // Also update any selected procedures with this template
+      setSelectedProcedures(
+        selectedProcedures.map((proc) =>
+          proc.id === editingProcedure.id ? editingProcedure : proc,
+        ),
+      );
+
+      setIsEditDialogOpen(false);
+      setEditingProcedure(null);
+
+      toast({
+        title: "Procédure mise à jour",
+        description: "Les modifications ont été enregistrées avec succès.",
+      });
+    } catch (error) {
+      console.error("Error updating procedure:", error);
+      toast({
+        title: "Erreur",
+        description:
+          "Une erreur s'est produite lors de la mise à jour de la procédure.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const addProcedure = (procedure: Procedure) => {
     setSelectedProcedures([...selectedProcedures, procedure]);
@@ -198,38 +351,217 @@ const TreatmentPlanBuilder: React.FC<TreatmentPlanBuilderProps> = ({
     return totalCost * (1 - insuranceVerification.coveragePercent / 100);
   };
 
-  const handleSave = () => {
-    const plan: TreatmentPlan = {
-      id: existingPlan?.id || `plan-${Date.now()}`,
-      patientId,
-      patientName,
-      procedures: selectedProcedures,
-      totalCost: calculateTotalCost(),
-      insuranceVerification,
-      notes,
-      createdAt: existingPlan?.createdAt || new Date(),
-      status: existingPlan?.status || "draft",
-    };
-    onSave(plan);
+  const handleSave = async () => {
+    try {
+      const planId = existingPlan?.id || `plan-${Date.now()}`;
+
+      // Save the treatment plan to the database
+      const planData = {
+        id: planId,
+        patient_id: patientId,
+        name: `Plan for ${patientName}`,
+        total_cost: calculateTotalCost(),
+        notes: notes,
+        status: existingPlan?.status || "draft",
+      };
+
+      // Create or update the treatment plan
+      if (existingPlan?.id) {
+        await dataService.update("treatment_plans", existingPlan.id, planData);
+      } else {
+        await dataService.create("treatment_plans", planData);
+      }
+
+      // Save the procedures
+      await dataService.treatmentPlans.saveProcedures(
+        planId,
+        selectedProcedures,
+      );
+
+      // Create the plan object to return to the caller
+      const plan: TreatmentPlan = {
+        id: planId,
+        patientId,
+        patientName,
+        procedures: selectedProcedures,
+        totalCost: calculateTotalCost(),
+        insuranceVerification,
+        notes,
+        createdAt: existingPlan?.createdAt || new Date(),
+        status: existingPlan?.status || "draft",
+      };
+
+      onSave(plan);
+
+      toast({
+        title: "Plan de traitement enregistré",
+        description: "Le plan de traitement a été enregistré avec succès.",
+      });
+    } catch (error) {
+      console.error("Error saving treatment plan:", error);
+      toast({
+        title: "Erreur",
+        description:
+          "Une erreur s'est produite lors de l'enregistrement du plan de traitement.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleShare = () => {
-    const plan: TreatmentPlan = {
-      id: existingPlan?.id || `plan-${Date.now()}`,
-      patientId,
-      patientName,
-      procedures: selectedProcedures,
-      totalCost: calculateTotalCost(),
-      insuranceVerification,
-      notes,
-      createdAt: existingPlan?.createdAt || new Date(),
-      status: existingPlan?.status || "draft",
-    };
-    onShare(plan);
+  const handleShare = async () => {
+    try {
+      // First save the plan
+      await handleSave();
+
+      const plan: TreatmentPlan = {
+        id: existingPlan?.id || `plan-${Date.now()}`,
+        patientId,
+        patientName,
+        procedures: selectedProcedures,
+        totalCost: calculateTotalCost(),
+        insuranceVerification,
+        notes,
+        createdAt: existingPlan?.createdAt || new Date(),
+        status: existingPlan?.status || "draft",
+      };
+
+      onShare(plan);
+
+      toast({
+        title: "Plan de traitement partagé",
+        description: "Le plan de traitement a été partagé avec le patient.",
+      });
+    } catch (error) {
+      console.error("Error sharing treatment plan:", error);
+      toast({
+        title: "Erreur",
+        description:
+          "Une erreur s'est produite lors du partage du plan de traitement.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
     <div className="w-full h-full bg-white p-6 overflow-auto">
+      {/* Edit Procedure Dialog */}
+      {isEditDialogOpen && editingProcedure && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Modifier la procédure</h2>
+
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="proc-name">Nom</Label>
+                <Input
+                  id="proc-name"
+                  value={editingProcedure.name}
+                  onChange={(e) =>
+                    setEditingProcedure({
+                      ...editingProcedure,
+                      name: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="proc-code">Code</Label>
+                <Input
+                  id="proc-code"
+                  value={editingProcedure.code}
+                  onChange={(e) =>
+                    setEditingProcedure({
+                      ...editingProcedure,
+                      code: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="proc-cost">Coût ($)</Label>
+                <Input
+                  id="proc-cost"
+                  type="number"
+                  value={editingProcedure.cost}
+                  onChange={(e) =>
+                    setEditingProcedure({
+                      ...editingProcedure,
+                      cost: parseFloat(e.target.value),
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="proc-duration">Durée (min)</Label>
+                <Input
+                  id="proc-duration"
+                  type="number"
+                  value={editingProcedure.duration}
+                  onChange={(e) =>
+                    setEditingProcedure({
+                      ...editingProcedure,
+                      duration: parseInt(e.target.value),
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="proc-category">Catégorie</Label>
+                <Select
+                  value={editingProcedure.category}
+                  onValueChange={(value) =>
+                    setEditingProcedure({
+                      ...editingProcedure,
+                      category: value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner une catégorie" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Diagnostic">Diagnostic</SelectItem>
+                    <SelectItem value="Preventive">Préventif</SelectItem>
+                    <SelectItem value="Restorative">Restauration</SelectItem>
+                    <SelectItem value="Endodontic">Endodontie</SelectItem>
+                    <SelectItem value="Periodontic">Parodontie</SelectItem>
+                    <SelectItem value="Prosthodontic">Prothèse</SelectItem>
+                    <SelectItem value="Oral Surgery">Chirurgie</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="proc-description">Description</Label>
+                <Textarea
+                  id="proc-description"
+                  value={editingProcedure.description}
+                  onChange={(e) =>
+                    setEditingProcedure({
+                      ...editingProcedure,
+                      description: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Annuler
+              </Button>
+              <Button onClick={handleUpdateProcedure}>Enregistrer</Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Treatment Plan Builder</h1>
@@ -319,14 +651,26 @@ const TreatmentPlanBuilder: React.FC<TreatmentPlanBuilderProps> = ({
                               </span>
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => addProcedure(procedure)}
-                            className="ml-2"
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openEditDialog(procedure)}
+                              className="h-8 w-8 p-0"
+                              title="Edit procedure"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => addProcedure(procedure)}
+                              className="h-8 w-8 p-0"
+                              title="Add to plan"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </Card>
                     ))}

@@ -46,12 +46,16 @@ const PatientDirectory = ({
     onPatientSelect(patient);
   };
 
+  const handleAddPatientClick = () => {
+    onAddPatient();
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-white border-r border-gray-200">
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Patients</h2>
-          <Button size="sm" onClick={onAddPatient}>
+          <Button size="sm" onClick={handleAddPatientClick}>
             <Plus className="h-4 w-4 mr-2" />
             Add New
           </Button>

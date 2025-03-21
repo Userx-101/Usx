@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Bell, Check, Clock, MessageSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { supabase } from "@/lib/supabase";
+import { useSettings } from "@/contexts/SettingsContext";
 
 interface NotificationProps {
   id: string;
@@ -22,6 +24,7 @@ interface NotificationProps {
   read: boolean;
   avatar?: string;
   initials?: string;
+  timestamp?: Date;
 }
 
 const defaultNotifications: NotificationProps[] = [
@@ -33,6 +36,7 @@ const defaultNotifications: NotificationProps[] = [
     time: "30 min ago",
     read: false,
     initials: "JD",
+    timestamp: new Date(Date.now() - 30 * 60 * 1000),
   },
   {
     id: "2",
@@ -43,6 +47,7 @@ const defaultNotifications: NotificationProps[] = [
     read: false,
     avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
     initials: "SM",
+    timestamp: new Date(Date.now() - 60 * 60 * 1000),
   },
   {
     id: "3",
@@ -52,6 +57,7 @@ const defaultNotifications: NotificationProps[] = [
     time: "2 hours ago",
     read: true,
     initials: "SYS",
+    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
   },
   {
     id: "4",
@@ -62,6 +68,7 @@ const defaultNotifications: NotificationProps[] = [
     read: true,
     avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Robert",
     initials: "RD",
+    timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000),
   },
   {
     id: "5",
@@ -72,6 +79,7 @@ const defaultNotifications: NotificationProps[] = [
     read: true,
     avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Emily",
     initials: "EW",
+    timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
   },
 ];
 
@@ -88,55 +96,169 @@ const NotificationCenter = ({
   onMarkAllAsRead = () => {},
   onDismiss = () => {},
 }: NotificationCenterProps) => {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [localNotifications, setLocalNotifications] =
     useState<NotificationProps[]>(notifications);
+  const { formatTime } = useSettings();
+
+  // Format notification times based on user settings
+  useEffect(() => {
+    const formattedNotifications = notifications.map((notification) => {
+      if (notification.timestamp) {
+        const now = new Date();
+        const diff = now.getTime() - notification.timestamp.getTime();
+
+        let timeString;
+        if (diff < 60 * 1000) {
+          timeString = "Just now";
+        } else if (diff < 60 * 60 * 1000) {
+          const minutes = Math.floor(diff / (60 * 1000));
+          timeString = `${minutes} min ago`;
+        } else if (diff < 24 * 60 * 60 * 1000) {
+          const hours = Math.floor(diff / (60 * 60 * 1000));
+          timeString = `${hours} hour${hours > 1 ? "s" : ""} ago`;
+        } else {
+          timeString = formatTime(notification.timestamp);
+        }
+
+        return { ...notification, time: timeString };
+      }
+      return notification;
+    });
+
+    setLocalNotifications(formattedNotifications);
+  }, [notifications, formatTime]);
+
+  // Auto-close dropdown when all notifications are read or dismissed
+  useEffect(() => {
+    if (open && localNotifications.length === 0) {
+      setOpen(false);
+    }
+  }, [localNotifications, open]);
 
   const unreadCount = localNotifications.filter(
     (notification) => !notification.read,
   ).length;
 
-  const handleMarkAsRead = (id: string) => {
-    setLocalNotifications((prev) =>
-      prev.map((notification) =>
-        notification.id === id ? { ...notification, read: true } : notification,
-      ),
-    );
-    onMarkAsRead(id);
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      // Update in database if connected
+      const { error } = await supabase
+        .from("notifications")
+        .update({ read: true })
+        .eq("id", id);
+
+      if (error) {
+        console.log("Database update failed, updating UI only");
+      }
+
+      // Update local state
+      setLocalNotifications((prev) =>
+        prev.map((notification) =>
+          notification.id === id
+            ? { ...notification, read: true }
+            : notification,
+        ),
+      );
+      onMarkAsRead(id);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      // Still update UI even if database fails
+      setLocalNotifications((prev) =>
+        prev.map((notification) =>
+          notification.id === id
+            ? { ...notification, read: true }
+            : notification,
+        ),
+      );
+    }
   };
 
-  const handleMarkAllAsRead = () => {
-    setLocalNotifications((prev) =>
-      prev.map((notification) => ({ ...notification, read: true })),
-    );
-    onMarkAllAsRead();
+  const handleMarkAllAsRead = async () => {
+    try {
+      // Update in database if connected
+      const { error } = await supabase
+        .from("notifications")
+        .update({ read: true })
+        .in(
+          "id",
+          localNotifications.filter((n) => !n.read).map((n) => n.id),
+        );
+
+      if (error) {
+        console.log("Database update failed, updating UI only");
+      }
+
+      // Update local state
+      setLocalNotifications((prev) =>
+        prev.map((notification) => ({ ...notification, read: true })),
+      );
+      onMarkAllAsRead();
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      // Still update UI even if database fails
+      setLocalNotifications((prev) =>
+        prev.map((notification) => ({ ...notification, read: true })),
+      );
+    }
   };
 
-  const handleDismiss = (id: string) => {
-    setLocalNotifications((prev) =>
-      prev.filter((notification) => notification.id !== id),
-    );
-    onDismiss(id);
+  const handleDismiss = async (id: string) => {
+    try {
+      // Delete from database if connected
+      const { error } = await supabase
+        .from("notifications")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        console.log("Database delete failed, updating UI only");
+      }
+
+      // Update local state
+      setLocalNotifications((prev) =>
+        prev.filter((notification) => notification.id !== id),
+      );
+      onDismiss(id);
+    } catch (error) {
+      console.error("Error dismissing notification:", error);
+      // Still update UI even if database fails
+      setLocalNotifications((prev) =>
+        prev.filter((notification) => notification.id !== id),
+      );
+    }
   };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "appointment":
-        return <Clock className="h-4 w-4 text-blue-500" />;
+        return <Clock className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
       case "message":
-        return <MessageSquare className="h-4 w-4 text-green-500" />;
+        return (
+          <MessageSquare className="h-4 w-4 text-green-500 dark:text-green-400" />
+        );
       case "system":
-        return <Bell className="h-4 w-4 text-amber-500" />;
+        return <Bell className="h-4 w-4 text-amber-500 dark:text-amber-400" />;
       default:
         return <Bell className="h-4 w-4" />;
     }
+  };
+
+  // Open dropdown when clicking the notification icon
+  const handleNotificationClick = () => {
+    setOpen(true);
   };
 
   return (
     <div className="bg-background">
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            onClick={handleNotificationClick}
+          >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 && (
               <Badge
@@ -171,7 +293,7 @@ const NotificationCenter = ({
                 {localNotifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className={`mb-2 p-3 rounded-lg flex items-start gap-3 ${notification.read ? "bg-background" : "bg-muted"}`}
+                    className={`mb-2 p-3 rounded-lg flex items-start gap-3 ${notification.read ? "bg-background" : "bg-muted dark:bg-slate-800"}`}
                   >
                     <div className="flex-shrink-0 mt-1">
                       {notification.avatar ? (

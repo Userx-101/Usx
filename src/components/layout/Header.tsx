@@ -28,6 +28,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
 
 interface HeaderProps {
   practiceName?: string;
@@ -41,7 +42,7 @@ interface HeaderProps {
 }
 
 const Header = ({
-  practiceName = "Clinique Dentaire Sourire",
+  practiceName = "DENTOGRAM",
   userAvatar = "",
   userName = "Dr. Sarah Johnson",
   userRole = "Dentiste",
@@ -51,11 +52,16 @@ const Header = ({
   notificationCount = 3,
 }: HeaderProps) => {
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [showNotifications, setShowNotifications] = React.useState(false);
   const navigate = useNavigate();
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearchSubmit(searchQuery);
+    if (searchQuery.trim()) {
+      onSearchSubmit(searchQuery);
+      // Navigate to patients page with search query
+      navigate(`/patients?search=${encodeURIComponent(searchQuery)}`);
+    }
   };
 
   const handleLogout = async () => {
@@ -75,6 +81,11 @@ const Header = ({
     navigate("/help");
   };
 
+  const handleNotificationClick = () => {
+    setShowNotifications(!showNotifications);
+    onNotificationClick();
+  };
+
   return (
     <header className="bg-background border-b border-border h-20 px-6 flex items-center justify-between w-full">
       <div className="flex items-center">
@@ -87,35 +98,19 @@ const Header = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <button
+            type="submit"
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground bg-transparent border-none p-0 cursor-pointer"
+          >
+            <Search className="h-4 w-4" />
+          </button>
         </form>
       </div>
 
       <div className="flex items-center space-x-4">
         <ThemeToggle />
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative"
-                onClick={onNotificationClick}
-              >
-                <Bell className="h-5 w-5" />
-                {notificationCount > 0 && (
-                  <span className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {notificationCount}
-                  </span>
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Notifications</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <NotificationCenter />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

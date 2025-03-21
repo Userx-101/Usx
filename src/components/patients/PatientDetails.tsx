@@ -1,5 +1,8 @@
 import React, { useState } from "react";
+import PatientFiles from "./PatientFiles";
+import EditPatientForm from "./EditPatientForm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/use-toast";
 import {
   Card,
   CardContent,
@@ -106,6 +109,7 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     new Date(),
   );
+  const { toast } = useToast();
 
   // Mock patient data
   const patient: Patient = {
@@ -306,9 +310,36 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
             </div>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="flex items-center">
-          <Edit className="h-4 w-4 mr-2" /> Edit Profile
-        </Button>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="flex items-center">
+              <Edit className="h-4 w-4 mr-2" /> Edit Profile
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Edit Patient Profile</DialogTitle>
+              <DialogDescription>
+                Update patient information and medical details
+              </DialogDescription>
+            </DialogHeader>
+            <EditPatientForm
+              patientId={patient.id}
+              onSuccess={() => {
+                toast({
+                  title: "Profile Updated",
+                  description: "Patient profile has been successfully updated.",
+                });
+              }}
+              onCancel={() => {
+                document
+                  .querySelector('[role="dialog"]')
+                  ?.querySelector('button[data-state="closed"]')
+                  ?.click();
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Tabs Navigation */}
@@ -316,11 +347,12 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
         defaultValue="info"
         className="flex-1 overflow-hidden flex flex-col"
       >
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="info">Personal Info</TabsTrigger>
           <TabsTrigger value="medical">Medical History</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="treatment">Treatment Plans</TabsTrigger>
+          <TabsTrigger value="files">Files & X-Rays</TabsTrigger>
         </TabsList>
 
         {/* Personal Info Tab */}
@@ -386,6 +418,9 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
                   variant="outline"
                   size="sm"
                   className="flex items-center"
+                  onClick={() =>
+                    alert("Policy details will be displayed here.")
+                  }
                 >
                   <FileText className="h-4 w-4 mr-2" /> View Full Policy Details
                 </Button>
@@ -426,7 +461,15 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
           <ScrollArea className="h-full pr-4">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium">Medical History</h3>
-              <Button size="sm" className="flex items-center">
+              <Button
+                size="sm"
+                className="flex items-center"
+                onClick={() =>
+                  alert(
+                    "Add medical record functionality will be implemented soon.",
+                  )
+                }
+              >
                 <Plus className="h-4 w-4 mr-2" /> Add Record
               </Button>
             </div>
@@ -565,7 +608,16 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button type="submit">Schedule Appointment</Button>
+                    <Button
+                      type="submit"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setIsScheduleDialogOpen(false);
+                        alert("Appointment scheduled successfully!");
+                      }}
+                    >
+                      Schedule Appointment
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -613,13 +665,24 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
                       )}
                     </CardContent>
                     <CardFooter className="flex justify-end space-x-2 pt-0">
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          alert(
+                            "Reschedule functionality will be implemented soon.",
+                          )
+                        }
+                      >
                         Reschedule
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() =>
+                          alert("Appointment cancelled successfully!")
+                        }
                       >
                         Cancel
                       </Button>
@@ -670,7 +733,15 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
           <ScrollArea className="h-full pr-4">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium">Treatment Plans</h3>
-              <Button size="sm" className="flex items-center">
+              <Button
+                size="sm"
+                className="flex items-center"
+                onClick={() =>
+                  alert(
+                    "New treatment plan functionality will be implemented soon.",
+                  )
+                }
+              >
                 <Plus className="h-4 w-4 mr-2" /> New Treatment Plan
               </Button>
             </div>
@@ -756,17 +827,36 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
                   </div>
                 </CardContent>
                 <CardFooter className="flex justify-between">
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      alert("Treatment plan details will be displayed here.")
+                    }
+                  >
                     View Details
                   </Button>
                   <div className="space-x-2">
-                    <Button variant="outline" size="sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        alert(
+                          "Edit plan functionality will be implemented soon.",
+                        )
+                      }
+                    >
                       Edit Plan
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() =>
+                        alert(
+                          "Treatment plan shared with patient successfully!",
+                        )
+                      }
                     >
                       Share with Patient
                     </Button>
@@ -774,6 +864,12 @@ const PatientDetails = ({ patientId = "12345" }: PatientDetailsProps) => {
                 </CardFooter>
               </Card>
             ))}
+          </ScrollArea>
+        </TabsContent>
+
+        <TabsContent value="files" className="flex-1 overflow-auto">
+          <ScrollArea className="h-full pr-4">
+            <PatientFiles patientId={patientId} />
           </ScrollArea>
         </TabsContent>
       </Tabs>

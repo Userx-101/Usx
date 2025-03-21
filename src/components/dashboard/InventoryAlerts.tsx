@@ -168,12 +168,19 @@ const InventoryAlerts = ({
                       variant="outline"
                       className="h-7 text-xs"
                       onClick={() => {
-                        onOrderItem(item.id);
-                        alert(`Ordering ${item.name} from ${item.supplier}`);
+                        const quantity = prompt(
+                          `Enter quantity to order for ${item.name}:`,
+                        );
+                        if (quantity && !isNaN(Number(quantity))) {
+                          onOrderItem(item.id);
+                          alert(
+                            `Ordering ${quantity} ${item.unit} of ${item.name} from ${item.supplier}`,
+                          );
+                        }
                       }}
                     >
                       <ShoppingCart className="h-3 w-3 mr-1" />
-                      Order Now
+                      Update Stock
                     </Button>
                   </div>
                 </div>

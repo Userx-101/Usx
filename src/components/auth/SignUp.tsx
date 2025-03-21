@@ -58,8 +58,13 @@ const SignUp = () => {
       }
 
       setSuccess(
-        "Registration successful! Please check your email to verify your account.",
+        "Inscription réussie ! Veuillez vérifier votre email pour confirmer votre compte.",
       );
+
+      // Redirect to signin page after 3 seconds
+      setTimeout(() => {
+        navigate("/signin");
+      }, 3000);
     } catch (error: any) {
       setError(error.message || "Failed to sign up");
     } finally {

@@ -201,6 +201,45 @@ export type Database = {
           },
         ]
       }
+      patient_files: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          file_category: string
+          file_name: string
+          file_path: string
+          file_type: string
+          id: string
+          patient_id: string
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          file_category: string
+          file_name: string
+          file_path: string
+          file_type: string
+          id?: string
+          patient_id: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          file_category?: string
+          file_name?: string
+          file_path?: string
+          file_type?: string
+          id?: string
+          patient_id?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       patients: {
         Row: {
           address: string | null
@@ -258,6 +297,36 @@ export type Database = {
         }
         Relationships: []
       }
+      practice_settings: {
+        Row: {
+          address: string | null
+          created_at: string | null
+          id: string
+          name: string
+          owner_id: string
+          phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       pricing: {
         Row: {
           category: string
@@ -290,6 +359,42 @@ export type Database = {
           price?: number
           procedure_code?: string
           procedure_name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      procedure_templates: {
+        Row: {
+          category: string | null
+          code: string | null
+          cost: number | null
+          created_at: string | null
+          description: string | null
+          duration: number | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          code?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          duration?: number | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          code?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          duration?: number | null
+          id?: string
+          name?: string
           updated_at?: string | null
         }
         Relationships: []
@@ -475,6 +580,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_settings: {
+        Row: {
+          accent_color: string | null
+          created_at: string | null
+          font_size: string | null
+          language: string | null
+          notification_email: boolean | null
+          notification_sms: boolean | null
+          onboarding_completed: boolean | null
+          theme: string | null
+          time_format: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          accent_color?: string | null
+          created_at?: string | null
+          font_size?: string | null
+          language?: string | null
+          notification_email?: boolean | null
+          notification_sms?: boolean | null
+          onboarding_completed?: boolean | null
+          theme?: string | null
+          time_format?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          accent_color?: string | null
+          created_at?: string | null
+          font_size?: string | null
+          language?: string | null
+          notification_email?: boolean | null
+          notification_sms?: boolean | null
+          onboarding_completed?: boolean | null
+          theme?: string | null
+          time_format?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       users: {
         Row: {

@@ -142,7 +142,12 @@ const InventoryStatus = ({
             </CardTitle>
             <CardDescription>Suivez les niveaux de fournitures</CardDescription>
           </div>
-          <Button variant="outline" size="sm" className="gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() => (window.location.href = "/inventory")}
+          >
             <Package className="h-4 w-4" /> Gérer l'Inventaire
           </Button>
         </div>

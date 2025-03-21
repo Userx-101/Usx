@@ -11,6 +11,7 @@ import {
   Settings,
   HelpCircle,
   LogOut,
+  Package,
 } from "lucide-react";
 import {
   Tooltip,
@@ -38,6 +39,7 @@ const Sidebar = ({
     { icon: ClipboardList, label: "Plans de traitement", path: "/treatments" },
     { icon: BarChart2, label: "Analytiques", path: "/analytics" },
     { icon: MessageSquare, label: "Communication", path: "/communication" },
+    { icon: Package, label: "Inventaire", path: "/inventory" },
     { icon: Settings, label: "Paramètres", path: "/settings" },
   ];
 
@@ -60,9 +62,7 @@ const Sidebar = ({
               C
             </div>
           ) : (
-            <div className="text-xl font-bold text-blue-600">
-              Clinique Dentaire
-            </div>
+            <div className="text-xl font-bold text-blue-600">Dentix</div>
           )}
         </Link>
       </div>

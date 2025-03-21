@@ -45,10 +45,10 @@ const CommunicationPortal = ({
     <div className="w-full h-full p-6 bg-gray-50">
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">
-          Patient Communication Portal
+          Staff Communication Portal
         </h1>
         <p className="text-gray-500 mt-1">
-          Send messages, view conversation history, and manage automated
+          Send messages to staff, view conversation history, and manage
           reminders
         </p>
       </div>
@@ -73,8 +73,8 @@ const CommunicationPortal = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <MessageComposer
-                patientId={patientId || "P12345"}
-                patientName={patientName || "Sarah Johnson"}
+                recipientId={patientId || "S12345"}
+                recipientName={patientName || "Dr. Johnson"}
                 onSend={handleSendMessage}
               />
             </div>
